@@ -23,10 +23,8 @@ typedef struct pbkdf2_sha1_tmp
 {
   u32  ipad[5];
   u32  opad[5];
-
   u32  dgst[32];
   u32  out[32];
-
 } pbkdf2_sha1_tmp_t;
 
 typedef struct zfs_crypto
@@ -40,7 +38,6 @@ typedef struct zfs_crypto
   u32 refcount;      // Reference count
   u32 suite;         // Encryption suite
   u32 hmac_key[16];  // 512-bit HMAC key
-
 } zfs_crypto_t;
 
 DECLSPEC void hmac_sha1_run_V (PRIVATE_AS u32x *w0, PRIVATE_AS u32x *w1, PRIVATE_AS u32x *w2, PRIVATE_AS u32x *w3, PRIVATE_AS u32x *ipad, PRIVATE_AS u32x *opad, PRIVATE_AS u32x *digest)
@@ -79,160 +76,80 @@ DECLSPEC void hmac_sha1_run_V (PRIVATE_AS u32x *w0, PRIVATE_AS u32x *w1, PRIVATE
   sha1_transform_vector (w0, w1, w2, w3, digest);
 }
 
-KERNEL_FQ void m26600_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, zfs_crypto_t))
+KERNEL_FQ void m26666_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, zfs_crypto_t))
 {
-  /**
-   * base
-   */
-
   const u64 gid = get_global_id (0);
-
   if (gid >= GID_CNT) return;
 
   sha1_hmac_ctx_t sha1_hmac_ctx;
-
   sha1_hmac_init_global_swap (&sha1_hmac_ctx, pws[gid].i, pws[gid].pw_len);
 
-  tmps[gid].ipad[0] = sha256_hmac_ctx.ipad.h[0];
-  tmps[gid].ipad[1] = sha256_hmac_ctx.ipad.h[1];
-  tmps[gid].ipad[2] = sha256_hmac_ctx.ipad.h[2];
-  tmps[gid].ipad[3] = sha256_hmac_ctx.ipad.h[3];
-  tmps[gid].ipad[4] = sha256_hmac_ctx.ipad.h[4];
-
-  tmps[gid].opad[0] = sha256_hmac_ctx.opad.h[0];
-  tmps[gid].opad[1] = sha256_hmac_ctx.opad.h[1];
-  tmps[gid].opad[2] = sha256_hmac_ctx.opad.h[2];
-  tmps[gid].opad[3] = sha256_hmac_ctx.opad.h[3];
-  tmps[gid].opad[4] = sha256_hmac_ctx.opad.h[4];
+  for (int i = 0; i < 5; i++)
+  {
+    tmps[gid].ipad[i] = sha1_hmac_ctx.ipad.h[i];
+    tmps[gid].opad[i] = sha1_hmac_ctx.opad.h[i];
+  }
 
   sha1_hmac_update_global_swap (&sha1_hmac_ctx, esalt_bufs[DIGESTS_OFFSET_HOST].salt_buf, 8);
 
-  for (u32 i = 0, j = 1; i < 8; i += 8, j += 1)
+  for (u32 i = 0, j = 1; i < 10; i += 5, j++)
   {
     sha1_hmac_ctx_t sha1_hmac_ctx2 = sha1_hmac_ctx;
 
-    u32 w0[4];
-    u32 w1[4];
-    u32 w2[4];
-    u32 w3[4];
-
-    w0[0] = j;
-    w0[1] = 0;
-    w0[2] = 0;
-    w0[3] = 0;
-    w1[0] = 0;
-    w1[1] = 0;
-    w1[2] = 0;
-    w1[3] = 0;
-    w2[0] = 0;
-    w2[1] = 0;
-    w2[2] = 0;
-    w2[3] = 0;
-    w3[0] = 0;
-    w3[1] = 0;
-    w3[2] = 0;
-    w3[3] = 0;
+    u32 w0[4] = { j, 0, 0, 0 };
+    u32 w1[4] = { 0 };
+    u32 w2[4] = { 0 };
+    u32 w3[4] = { 0 };
 
     sha1_hmac_update_64 (&sha1_hmac_ctx2, w0, w1, w2, w3, 4);
-
     sha1_hmac_final (&sha1_hmac_ctx2);
 
-    tmps[gid].dgst[i + 0] = sha1_hmac_ctx2.opad.h[0];
-    tmps[gid].dgst[i + 1] = sha1_hmac_ctx2.opad.h[1];
-    tmps[gid].dgst[i + 2] = sha1_hmac_ctx2.opad.h[2];
-    tmps[gid].dgst[i + 3] = sha1_hmac_ctx2.opad.h[3];
-    tmps[gid].dgst[i + 4] = sha1_hmac_ctx2.opad.h[4];
-
-    tmps[gid].out[i + 0] = tmps[gid].dgst[i + 0];
-    tmps[gid].out[i + 1] = tmps[gid].dgst[i + 1];
-    tmps[gid].out[i + 2] = tmps[gid].dgst[i + 2];
-    tmps[gid].out[i + 3] = tmps[gid].dgst[i + 3];
-    tmps[gid].out[i + 4] = tmps[gid].dgst[i + 4];
+    for (int k = 0; k < 5; k++)
+    {
+      tmps[gid].dgst[i + k] = sha1_hmac_ctx2.opad.h[k];
+      tmps[gid].out[i + k]  = sha1_hmac_ctx2.opad.h[k];
+    }
   }
 }
 
-KERNEL_FQ void m26600_loop (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, zfs_crypto_t))
+KERNEL_FQ void m26666_loop (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, zfs_crypto_t))
 {
   const u64 gid = get_global_id (0);
-
   if ((gid * VECT_SIZE) >= GID_CNT) return;
 
-  u32x ipad[8];
-  u32x opad[8];
-
-  ipad[0] = packv (tmps, ipad, gid, 0);
-  ipad[1] = packv (tmps, ipad, gid, 1);
-  ipad[2] = packv (tmps, ipad, gid, 2);
-  ipad[3] = packv (tmps, ipad, gid, 3);
-  ipad[4] = packv (tmps, ipad, gid, 4);
-
-  opad[0] = packv (tmps, opad, gid, 0);
-  opad[1] = packv (tmps, opad, gid, 1);
-  opad[2] = packv (tmps, opad, gid, 2);
-  opad[3] = packv (tmps, opad, gid, 3);
-  opad[4] = packv (tmps, opad, gid, 4);
-
-  for (u32 i = 0; i < 8; i += 8)
+  u32x ipad[5], opad[5];
+  for (int i = 0; i < 5; i++)
   {
-    u32x dgst[8];
-    u32x out[8];
+    ipad[i] = packv (tmps, ipad, gid, i);
+    opad[i] = packv (tmps, opad, gid, i);
+  }
 
-    dgst[0] = packv (tmps, dgst, gid, i + 0);
-    dgst[1] = packv (tmps, dgst, gid, i + 1);
-    dgst[2] = packv (tmps, dgst, gid, i + 2);
-    dgst[3] = packv (tmps, dgst, gid, i + 3);
-    dgst[4] = packv (tmps, dgst, gid, i + 4);
-
-    out[0] = packv (tmps, out, gid, i + 0);
-    out[1] = packv (tmps, out, gid, i + 1);
-    out[2] = packv (tmps, out, gid, i + 2);
-    out[3] = packv (tmps, out, gid, i + 3);
-    out[4] = packv (tmps, out, gid, i + 4);
+  for (u32 i = 0; i < 10; i += 5)
+  {
+    u32x dgst[5], out[5];
+    for (int k = 0; k < 5; k++)
+    {
+      dgst[k] = packv (tmps, dgst, gid, i + k);
+      out[k]  = packv (tmps, out,  gid, i + k);
+    }
 
     for (u32 j = 0; j < LOOP_CNT; j++)
     {
-      u32x w0[4];
-      u32x w1[4];
-      u32x w2[4];
-      u32x w3[4];
-
-      w0[0] = dgst[0];
-      w0[1] = dgst[1];
-      w0[2] = dgst[2];
-      w0[3] = dgst[3];
-      w1[0] = dgst[4];
-      w1[1] = dgst[5];
-      w1[2] = dgst[6];
-      w1[3] = dgst[7];
-      w2[0] = 0x80000000;
-      w2[1] = 0;
-      w2[2] = 0;
-      w2[3] = 0;
-      w3[0] = 0;
-      w3[1] = 0;
-      w3[2] = 0;
-      w3[3] = (64 + 32) * 8;
+      u32x w0[4] = { dgst[0], dgst[1], dgst[2], dgst[3] };
+      u32x w1[4] = { dgst[4], 0, 0, 0 };
+      u32x w2[4] = { 0 };
+      u32x w3[4] = { 0 };
 
       hmac_sha1_run_V (w0, w1, w2, w3, ipad, opad, dgst);
 
-      out[0] ^= dgst[0];
-      out[1] ^= dgst[1];
-      out[2] ^= dgst[2];
-      out[3] ^= dgst[3];
-      out[4] ^= dgst[4];
+      for (int k = 0; k < 5; k++) out[k] ^= dgst[k];
     }
 
-    unpackv (tmps, dgst, gid, i + 0, dgst[0]);
-    unpackv (tmps, dgst, gid, i + 1, dgst[1]);
-    unpackv (tmps, dgst, gid, i + 2, dgst[2]);
-    unpackv (tmps, dgst, gid, i + 3, dgst[3]);
-    unpackv (tmps, dgst, gid, i + 4, dgst[4]);
-
-    unpackv (tmps, out, gid, i + 0, out[0]);
-    unpackv (tmps, out, gid, i + 1, out[1]);
-    unpackv (tmps, out, gid, i + 2, out[2]);
-    unpackv (tmps, out, gid, i + 3, out[3]);
-    unpackv (tmps, out, gid, i + 4, out[4]);
+    for (int k = 0; k < 5; k++)
+    {
+      unpackv (tmps, dgst, gid, i + k, dgst[k]);
+      unpackv (tmps, out,  gid, i + k, out[k]);
+    }
   }
 }
 
@@ -241,43 +158,22 @@ KERNEL_FQ void m26666_comp (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, zfs_crypto_
   const u64 gid = get_global_id (0);
   if (gid >= GID_CNT) return;
 
-  // Derive AES key from PBKDF2 output
   u32 ukey[8];
-  ukey[0] = tmps[gid].out[0];
-  ukey[1] = tmps[gid].out[1];
-  ukey[2] = tmps[gid].out[2];
-  ukey[3] = tmps[gid].out[3];
-  ukey[4] = tmps[gid].out[4];
+  for (int i = 0; i < 8; i++) ukey[i] = tmps[gid].out[i];
 
-  // AES-GCM initialization
-  u32 key[60] = { 0 };
-  u32 subKey[4] = { 0 };
+  u32 key[60] = { 0 }, subKey[4] = { 0 };
   AES_GCM_Init (ukey, 256, key, subKey, s_te0, s_te1, s_te2, s_te3, s_te4);
 
-  // ZFS-specific IV (96-bit)
   u32 iv[3];
-  iv[0] = esalt_bufs[DIGESTS_OFFSET_HOST].iv_buf[0];
-  iv[1] = esalt_bufs[DIGESTS_OFFSET_HOST].iv_buf[1];
-  iv[2] = esalt_bufs[DIGESTS_OFFSET_HOST].iv_buf[2];
+  for (int i = 0; i < 3; i++) iv[i] = esalt_bufs[DIGESTS_OFFSET_HOST].iv_buf[i];
 
-  // Prepare J0 for GCM
   u32 J0[4] = { 0 };
   AES_GCM_Prepare_J0 (iv, 12, subKey, J0);
 
-  // Decrypt master key
-  u32 T[4] = { 0 };
-  u32 S[4] = { 0 };
-  
-  AES_GCM_GHASH_GLOBAL (subKey, 
-                       NULL,            // No AAD
-                       0,               // AAD length
-                       esalt_bufs[DIGESTS_OFFSET_HOST].master_key, 
-                       32,              // 256-bit master key
-                       S);
-
+  u32 T[4] = { 0 }, S[4] = { 0 };
+  AES_GCM_GHASH_GLOBAL (subKey, NULL, 0, esalt_bufs[DIGESTS_OFFSET_HOST].master_key, 32, S);
   AES_GCM_GCTR (key, J0, S, 16, T, s_te0, s_te1, s_te2, s_te3, s_te4);
 
-  // Verify against stored MAC
   const u32 r0 = T[0] ^ esalt_bufs[DIGESTS_OFFSET_HOST].mac[0];
   const u32 r1 = T[1] ^ esalt_bufs[DIGESTS_OFFSET_HOST].mac[1];
   const u32 r2 = T[2] ^ esalt_bufs[DIGESTS_OFFSET_HOST].mac[2];
