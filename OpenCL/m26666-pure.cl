@@ -90,9 +90,10 @@ KERNEL_FQ void m26666_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, zfs_crypto_
     tmps[gid].opad[i] = sha1_hmac_ctx.opad.h[i];
   }
 
-  sha1_hmac_update_global_swap (&sha1_hmac_ctx, esalt_bufs[DIGESTS_OFFSET_HOST].salt_buf, 8);
+  // Process salt
+  sha1_hmac_update_global_swap (&sha1_hmac_ctx, esalt_bufs[DIGESTS_OFFSET_HOST].salt_buf, salt_bufs[SALT_POS_HOST].salt_len);
 
-  for (u32 i = 0, j = 1; i < 10; i += 5, j++)
+  for (u32 i = 0, j = 1; i < 20; i += 5, j += 1)
   {
     sha1_hmac_ctx_t sha1_hmac_ctx2 = sha1_hmac_ctx;
 
@@ -104,11 +105,16 @@ KERNEL_FQ void m26666_init (KERN_ATTR_TMPS_ESALT (pbkdf2_sha1_tmp_t, zfs_crypto_
     sha1_hmac_update_64 (&sha1_hmac_ctx2, w0, w1, w2, w3, 4);
     sha1_hmac_final (&sha1_hmac_ctx2);
 
-    for (int k = 0; k < 5; k++)
-    {
-      tmps[gid].dgst[i + k] = sha1_hmac_ctx2.opad.h[k];
-      tmps[gid].out[i + k]  = sha1_hmac_ctx2.opad.h[k];
-    }
+    tmps[gid].dgst[i + 0] = sha1_hmac_ctx2.opad.h[0];
+    tmps[gid].dgst[i + 1] = sha1_hmac_ctx2.opad.h[1];
+    tmps[gid].dgst[i + 2] = sha1_hmac_ctx2.opad.h[2];
+    tmps[gid].dgst[i + 3] = sha1_hmac_ctx2.opad.h[3];
+    tmps[gid].dgst[i + 4] = sha1_hmac_ctx2.opad.h[4];
+
+    tmps[gid].out[i + 0] = tmps[gid].dgst[i + 0];
+    tmps[gid].out[i + 1] = tmps[gid].dgst[i + 1];
+    tmps[gid].out[i + 2] = tmps[gid].dgst[i + 3];
+    tmps[gid].out[i + 3] = tmps[gid].dgst[i + 4];
   }
 }
 

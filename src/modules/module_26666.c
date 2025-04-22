@@ -18,7 +18,7 @@ static const u32   DGST_POS2      = 2;
 static const u32   DGST_POS3      = 3;
 static const u32   DGST_SIZE      = DGST_SIZE_4_4;
 static const u32   HASH_CATEGORY  = HASH_CATEGORY_FDE;
-static const char *HASH_NAME      = "ZFS encryption (PBKDF2-HMAC-SHA256 + AES-256-GCM)";
+static const char *HASH_NAME      = "ZFS encryption (PBKDF2-HMAC-SHA1 + AES-256-GCM)";
 static const u64   KERN_TYPE      = 26666;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
                                   | OPTI_TYPE_SLOW_HASH_SIMD_LOOP;
@@ -196,9 +196,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   salt->salt_iter  = zfs->iterations - 1;
 
   // Salt (64-bit)
+  
   salt->salt_buf[0] = hex_to_u32((u8 *)token.buf[3] + 0);
   salt->salt_buf[1] = hex_to_u32((u8 *)token.buf[3] + 8);
   salt->salt_len = 8;
+  char tmp_salt[17] = { 0 };  // 16 hex chars + null terminator
+
+  u32_to_hex(salt->salt_buf[0], (u8 *)tmp_salt + 0);  // First 4 bytes (8 hex chars)
+  u32_to_hex(salt->salt_buf[1], (u8 *)tmp_salt + 8);  // Second 4 bytes (8 hex chars)
 
   // MAC
   hex_to_u32_buffer((const u8 *)token.buf[4] + 0, &digest[0], 1);
@@ -238,11 +243,11 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   const zfs_crypto_t *zfs = (const zfs_crypto_t *) esalt_buf;
   const u32 *digest = (const u32 *) digest_buf;
 
-  char tmp_salt[9]    = { 0 };
+  char tmp_salt[17]    = { 0 };
   char tmp_mac[33]    = { 0 };
   char tmp_guid[17]   = { 0 };
   char tmp_mkey[65]   = { 0 };
-  char tmp_ddoobj[3]  = { 0 };
+  char tmp_ddoobj[8]  = { 0 };
   char tmp_iv[25]     = { 0 };
   char tmp_hmac[129]  = { 0 };
 
