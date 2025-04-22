@@ -66,11 +66,11 @@ int hex_to_u32_buffer (const u8 *hex, u32 *buf, int u32_count)
   {
     u32 val = 0;
 
-    for (int j = 0; j < 4; j++) // 4 bytes per u32
+    for (int j = 0; j < 4; j++) // 4 bytes per u32 (i.e., 8 hex chars)
     {
-      const u8 *p = &hex[i * 8 + j * 2]; // pointer to 2 hex chars
-      u8 byte = hex_to_u8(p);            // use pointer version
-      val = (val << 8) | byte;
+      const u8 *p = &hex[i * 8 + j * 2]; // 2 hex chars per byte
+      u8 byte = hex_to_u8(p);           // assume hex_to_u8 parses 2 hex chars to a byte
+      val = (val << 8) | byte;          // big-endian
     }
 
     buf[i] = val;
@@ -78,6 +78,7 @@ int hex_to_u32_buffer (const u8 *hex, u32 *buf, int u32_count)
 
   return 0;
 }
+
 
 typedef struct pbkdf2_sha1_tmp {
   u32  ipad[5];
@@ -200,25 +201,26 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   salt->salt_len = 8;
 
   // MAC
-  hex_to_u32_buffer((u8 *)token.buf[4] +  0, 8, &digest[0]);
-  hex_to_u32_buffer((u8 *)token.buf[4] +  8, 8, &digest[1]);
-  hex_to_u32_buffer((u8 *)token.buf[4] + 16, 8, &digest[2]);
-  hex_to_u32_buffer((u8 *)token.buf[4] + 24, 8, &digest[3]);
+  hex_to_u32_buffer((const u8 *)token.buf[4] + 0, &digest[0], 1);
+  hex_to_u32_buffer((const u8 *)token.buf[4] + 8, &digest[1], 1);
+  hex_to_u32_buffer((const u8 *)token.buf[4] + 16, &digest[2], 1);
+  hex_to_u32_buffer((const u8 *)token.buf[4] + 24, &digest[3], 1);
 
   // GUID
   zfs->guid = hex_to_u64((u8 *)token.buf[5]);
 
   // Master Key
   for (int i = 0; i < 8; i++)
-    hex_to_u32_buffer((u8 *)token.buf[6] + (i * 8), 8, &zfs->master_key[i]);
+    hex_to_u32_buffer((const u8 *)token.buf[6] + (i * 8), &zfs->master_key[i], 1);
+  //hex_to_u32_buffer((u8 *)token.buf[6] + (i * 8), 8, &zfs->master_key[i]);
 
   // DDOBJ
   zfs->ddoobj = hex_to_u32((u8 *)token.buf[7]);
 
   // IV (12 bytes)
-  hex_to_u32_buffer((u8 *)token.buf[8] + 0, 8, &zfs->iv[0]);
-  hex_to_u32_buffer((u8 *)token.buf[8] + 8, 8, &zfs->iv[1]);
-  hex_to_u32_buffer((u8 *)token.buf[8] + 16, 8, &zfs->iv[2]);
+  hex_to_u32_buffer((const u8 *)token.buf[8] + 0, &zfs->iv[0], 1);
+  hex_to_u32_buffer((const u8 *)token.buf[8] + 8, &zfs->iv[1], 1);
+  hex_to_u32_buffer((const u8 *)token.buf[8] + 16, &zfs->iv[2], 1);
 
   // Remaining parameters
   zfs->refcount = hc_strtoul((char *)token.buf[9], NULL, 10);
@@ -226,7 +228,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   // HMAC Key
   for (int i = 0; i < 16; i++)
-    hex_to_u32_buffer((u8 *)token.buf[11] + (i * 8), 8, &zfs->hmac_key[i]);
+    hex_to_u32_buffer((const u8 *)token.buf[11] + (i * 8), &zfs->hmac_key[i], 1);
 
   return PARSER_OK;
 }
@@ -303,7 +305,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_dgst_pos3                = module_dgst_pos3;
   module_ctx->module_dgst_size                = module_dgst_size;
   module_ctx->module_dictstat_disable         = MODULE_DEFAULT;
-  module_ctx->module_esalt_size               = sizeof(zfs_crypto_t);
+  module_ctx->module_esalt_size = (u64 (*)(const hashconfig_t *, const user_options_t *, const user_options_extra_t *))sizeof(zfs_crypto_t);
+  module_ctx->module_tmp_size = (u64 (*)(const hashconfig_t *, const user_options_t *, const user_options_extra_t *))sizeof(pbkdf2_sha1_tmp_t);
   module_ctx->module_extra_buffer_size        = MODULE_DEFAULT;
   module_ctx->module_extra_tmp_size           = MODULE_DEFAULT;
   module_ctx->module_extra_tuningdb_block     = MODULE_DEFAULT;
@@ -358,7 +361,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_separator                = MODULE_DEFAULT;
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
-  module_ctx->module_tmp_size                 = sizeof(pbkdf2_sha1_tmp_t);
   module_ctx->module_unstable_warning         = MODULE_DEFAULT;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }
